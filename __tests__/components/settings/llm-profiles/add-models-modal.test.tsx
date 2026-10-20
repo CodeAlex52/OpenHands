@@ -442,6 +442,88 @@ describe("AddModelsModal", () => {
     });
   });
 
+  it("keeps a keyless selection when connections refresh while the modal is open", async () => {
+    // The connections query refetches on staleness/network reconnect. The seed
+    // effect must not re-run then: doing so rebinds the row's connection over
+    // the explicit "No connection (keyless)" choice the user just made.
+    const onClose = vi.fn();
+    const view = renderModal(OPENAI_CONNECTION, [], onClose);
+    await screen.findByTestId("add-models-row-openai/gpt-4o");
+
+    await userEvent.selectOptions(
+      screen.getByTestId("add-models-connection"),
+      "",
+    );
+    expect(screen.getByTestId("add-models-keyless-note")).toBeInTheDocument();
+
+    // A refetch delivers a renamed copy of the same connection.
+    view.rerender(
+      <QueryClientProvider client={queryClient}>
+        <AddModelsModal
+          isOpen
+          connections={[
+            { ...OPENAI_CONNECTION, display_name: "Renamed", updated_at: 3 },
+          ]}
+          initialConnectionId="conn-openai"
+          existingNames={[]}
+          onClose={onClose}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByTestId("add-models-connection")).toHaveValue("");
+    expect(screen.getByTestId("add-models-keyless-note")).toBeInTheDocument();
+    // Preselect mode auto-selects the rows, so this is the draft as it stood.
+    expect(
+      screen.getByTestId("add-models-check-openai/gpt-4o"),
+    ).toBeChecked();
+
+    await userEvent.click(screen.getByTestId("add-models-submit"));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(ProfilesService.saveProfile).toHaveBeenCalledWith("gpt-4o", {
+      llm: {
+        model: "openai/gpt-4o",
+        provider_connection_id: null,
+      },
+      include_secrets: false,
+    });
+  });
+
+  it("keeps the chosen provider and model selection when connections refresh in chooser mode", async () => {
+    // Same refetch in chooser mode used to reset the provider to null, which
+    // emptied the model list and the draft selection with it.
+    const onClose = vi.fn();
+    const view = renderModal(null, [], onClose);
+    await chooseOpenAI();
+    await screen.findByTestId("add-models-row-openai/gpt-4o");
+    await userEvent.click(
+      screen.getByTestId("add-models-check-openai/gpt-4o"),
+    );
+    expect(screen.getByTestId("add-models-submit")).toHaveTextContent(
+      "Add 1 profiles",
+    );
+
+    view.rerender(
+      <QueryClientProvider client={queryClient}>
+        <AddModelsModal
+          isOpen
+          connections={[OPENAI_CONNECTION]}
+          initialConnectionId={null}
+          existingNames={[]}
+          onClose={onClose}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByTestId("add-models-provider")).toHaveValue("openai");
+    expect(
+      screen.getByTestId("add-models-check-openai/gpt-4o"),
+    ).toBeChecked();
+    expect(screen.getByTestId("add-models-submit")).toHaveTextContent(
+      "Add 1 profiles",
+    );
+  });
+
   it("keeps the modal open and marks the row on per-model failure", async () => {
     const onClose = vi.fn();
     vi.mocked(ProfilesService.saveProfile)
