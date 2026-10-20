@@ -1,5 +1,7 @@
 name: verify
-on: workflow_dispatch
+on:
+  push:
+    branches: ["tmp/verify"]
 jobs:
   test:
     runs-on: ubuntu-latest
