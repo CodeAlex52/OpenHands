@@ -11,4 +11,5 @@ jobs:
         with:
           node-version: "24.15"
       - run: npm ci
+      - run: npm run make-i18n
       - run: npx vitest run __tests__/components/settings/llm-profiles/add-models-modal.test.tsx
