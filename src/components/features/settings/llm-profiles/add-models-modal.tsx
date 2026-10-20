@@ -168,20 +168,20 @@ export function AddModelsModal({
   // provider, connection, selections, and Saved/Failed marks. On open, seed
   // the provider/connection from `initialConnectionId` (preselect mode) or
   // leave both unset (chooser mode). On close, clear everything.
+  //
+  // Seeding is an open transition, not a reaction to fresh connection data:
+  // `connections` is refetched when its query goes stale or the network
+  // reconnects, and re-running the seed on every refetch discarded the user's
+  // draft — it rebound the row's connection id over an explicit "No
+  // connection (keyless)" choice, and cleared the provider in chooser mode.
+  // `seededRef` records the seed for the current opening (the connection id,
+  // or the keyless sentinel) so a refresh leaves the draft alone. Preselect
+  // data that arrives late is still seeded: the effect waits until the pool
+  // contains the requested connection.
+  const seededRef = useRef<string | null>(null);
   useEffect(() => {
-    if (isOpen) {
-      const initial =
-        initialConnectionId &&
-        connections.find((c) => c.id === initialConnectionId);
-      if (initial) {
-        setSelectedProvider(initial.provider);
-        setSelectedConnectionId(initial.id);
-        autoSelectRef.current = true;
-      } else {
-        setSelectedProvider(null);
-        setSelectedConnectionId(null);
-      }
-    } else {
+    if (!isOpen) {
+      seededRef.current = null;
       // Clear the provider/connection too, not just the rows. The modal stays
       // mounted between openings, and `useProviderModels` serves a cached
       // `models.data` for the same provider — so if `selectedProvider` is left
@@ -194,6 +194,22 @@ export function AddModelsModal({
       setRows([]);
       setSubmitting(false);
       autoSelectRef.current = false;
+      return;
+    }
+    if (initialConnectionId) {
+      if (seededRef.current === initialConnectionId) return;
+      const initial = connections.find((c) => c.id === initialConnectionId);
+      if (!initial) return;
+      seededRef.current = initialConnectionId;
+      setSelectedProvider(initial.provider);
+      setSelectedConnectionId(initial.id);
+      autoSelectRef.current = true;
+      return;
+    }
+    if (seededRef.current !== KEYLESS_CONNECTION_VALUE) {
+      seededRef.current = KEYLESS_CONNECTION_VALUE;
+      setSelectedProvider(null);
+      setSelectedConnectionId(null);
     }
   }, [isOpen, initialConnectionId, connections]);
 
